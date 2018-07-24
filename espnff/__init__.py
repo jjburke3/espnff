@@ -1,4 +1,5 @@
-__all__ = ['League',
+__all__ = ['ESPNFF',
+           'League',
            'Team',
            'Settings',
            'Matchup',
@@ -9,6 +10,7 @@ __all__ = ['League',
            ]
 
 from .league import League
+from .client import ESPNFF
 from .team import Team
 from .settings import Settings
 from .matchup import Matchup

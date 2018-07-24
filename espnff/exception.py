@@ -12,3 +12,6 @@ class InvalidLeagueException(ESPNFFException):
 
 class UnknownLeagueException(ESPNFFException):
     pass
+
+class AuthorizationError(Exception):
+    pass
