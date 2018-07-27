@@ -5,9 +5,16 @@ from .utils import (two_step_dominance,
 from .team import Team
 from .settings import Settings
 from .matchup import Matchup
+from .player import Player
 from .exception import (PrivateLeagueException,
                         InvalidLeagueException,
                         UnknownLeagueException, )
+
+from .boxCodes import (lineupSlots,
+                       nflTeams,
+                       nflTeamsAbbrev,
+                       playerPos,
+                       healthStatus)
 
 
 class League(object):
@@ -38,6 +45,7 @@ class League(object):
             }
 
         r = requests.get('%sleagueSettings' % (self.ENDPOINT, ), params=params, cookies=cookies)
+        
         self.status = r.status_code
         data = r.json()
 
@@ -98,6 +106,64 @@ class League(object):
         power_rank = power_points(dominance_matrix, teams_sorted, week)
         return power_rank
 
+    def boxscore(self,week,team):
+        params = {
+            'leagueId': self.league_id,
+            'seasonId': self.year,
+            'scoringPeriodId': week,
+            'teamId' : team
+        }
+        r = requests.get('%sboxscore' % (self.ENDPOINT, ), params=params)
+        data = r.json()
+        if self.status == 401:
+            raise PrivateLeagueException(data['error'][0]['message'])
+
+        elif self.status == 404:
+            raise InvalidLeagueException(data['error'][0]['message'])
+
+        elif self.status != 200:
+            raise UnknownLeagueException('Unknown %s Error' % self.status)
+        
+        boxscoreData = data['boxscore']
+        if boxscoreData['teams'][0]['teamId'] == team:
+            d = 0
+        else:
+            d = 1
+        teamData = boxscoreData['teams'][d]
+        
+        players = teamData['slots']
+        playerList = []
+        for player in players:
+            if 'player' in player:
+                playerInfo = player['player']
+                if len(player['currentPeriodRealStats']) == 0:
+                    playerPoints = 0
+                else:
+                    playerPoints = player['currentPeriodRealStats']['appliedStatTotal']
+                playerData = {'playerName' : playerInfo['firstName'] + ' ' + playerInfo['lastName'],
+                              'playerTeam' : nflTeams[playerInfo['proTeamId']],
+                              'slot' : lineupSlots[player['slotCategoryId']],
+                              'healthStatus' : healthStatus[playerInfo['healthStatus']],
+                              'playerPos' : playerPos[playerInfo['defaultPositionId']],
+                              'Points' : playerPoints
+                              }
+            else:
+                playerData = {'playerName' : 'empty',
+                              'playerTeam' : 'empty',
+                              'slot' : lineupSlots[player['slotCategoryId']],
+                              'healthStatus' : 'empty',
+                              'playerPos' : 'empty',
+                              'Points' : 0}
+            playerList.append(playerData)
+            
+        result = {'teamId' : teamData['teamId'],
+                  'teamName' : teamData['team']['teamAbbrev'],
+                  'opponentId' : boxscoreData['teams'][1-d]['teamId'],
+                  'opponentName' : boxscoreData['teams'][1-d]['team']['teamAbbrev'],
+                  'playerList' : playerList}
+
+        return result
+
     def scoreboard(self, week=None):
         '''Returns list of matchups for a given week'''
         params = {
@@ -110,7 +176,6 @@ class League(object):
         r = requests.get('%sscoreboard' % (self.ENDPOINT, ), params=params)
         self.status = r.status_code
         data = r.json()
-
         if self.status == 401:
             raise PrivateLeagueException(data['error'][0]['message'])
 
