@@ -12,6 +12,7 @@ lineupSlots = {
 };
 
 nflTeams = {
+  0 : 'FA',
   22: 'Arizona Cardinals',
   1 : 'Atlanta Falcons',
   33: 'Baltimore Ravens',
@@ -48,6 +49,7 @@ nflTeams = {
 }
 
 nflTeamsAbbrev = {
+  0 : 'FA',
   22: 'Ari',
   1 : 'Atl',
   33: 'Bal',
@@ -98,5 +100,8 @@ healthStatus = {
     1 : 'P',
     2 : 'Q',
     3 : 'D',
-    4 : 'O'
+    4 : 'O',
+    5 : 'IR',
+    11 : 'O',
+    13 : 'S'
 };
