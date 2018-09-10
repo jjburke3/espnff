@@ -157,9 +157,13 @@ class League(object):
             playerList.append(playerData)
             
         result = {'teamId' : teamData['teamId'],
+                  'season' : data['metadata']['seasonId'],
+                  'week' : boxscoreData['scheduleItems'][0]['matchupPeriodId'],
                   'teamName' : teamData['team']['teamAbbrev'],
+                  'teamPoints' : teamData['appliedActiveRealTotal'],
                   'opponentId' : boxscoreData['teams'][1-d]['teamId'],
                   'opponentName' : boxscoreData['teams'][1-d]['team']['teamAbbrev'],
+                  'opponentPoints' : boxscoreData['teams'][1-d]['appliedActiveRealTotal'],
                   'playerList' : playerList}
 
         return result
