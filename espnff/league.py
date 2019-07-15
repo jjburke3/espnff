@@ -17,12 +17,13 @@ from .boxCodes import (lineupSlots,
                        healthStatus)
 
 
+
 class League(object):
     '''Creates a League instance for Public ESPN league'''
     def __init__(self, league_id, year, espn_s2=None, swid=None):
         self.league_id = league_id
         self.year = year
-        self.ENDPOINT = "http://games.espn.com/ffl/api/v3/"
+        self.ENDPOINT = "http://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/segments/0/leagues/%d"
         self.teams = []
         self.espn_s2 = espn_s2
         self.swid = swid
@@ -33,37 +34,34 @@ class League(object):
 
     def _fetch_league(self):
         params = {
-            'leagueId': self.league_id,
-            'seasonId': self.year
+           'view':'mTeam'
         }
 
         cookies = None
         if self.espn_s2 and self.swid:
-            cookies = {
+            self.cookies = {
                 'espn_s2': self.espn_s2,
                 'SWID': self.swid
             }
+        r = requests.get(self.ENDPOINT % (self.year, self.league_id), cookies=self.cookies, params = params)
+        ##r = requests.get('%sleagueSettings' % (self.ENDPOINT, ), params=params, cookies=cookies)
 
-        r = requests.get('%sleagueSettings' % (self.ENDPOINT, ), params=params, cookies=cookies)
-        print('%sleagueSettings' % (self.ENDPOINT, ), params=params, cookies=cookies)
         self.status = r.status_code
+        
         data = r.json()
 
-        if self.status == 401:
-            raise PrivateLeagueException(data['error'][0]['message'])
 
-        elif self.status == 404:
-            raise InvalidLeagueException(data['error'][0]['message'])
+        self.teams = data['teams']
 
-        elif self.status != 200:
-            raise UnknownLeagueException('Unknown %s Error' % self.status)
 
-        self._fetch_teams(data)
-        self._fetch_settings(data)
+    def _fetch_draft_data(self, data):
+        teams = data['teams']
+        
+    
 
     def _fetch_teams(self, data):
         '''Fetch teams in league'''
-        teams = data['leaguesettings']['teams']
+        teams = data['teams']
 
         for team in teams:
             self.teams.append(Team(teams[team]))
@@ -87,33 +85,16 @@ class League(object):
     def _fetch_settings(self, data):
         self.settings = Settings(data)
 
-    def power_rankings(self, week):
-        '''Return power rankings for any week'''
-
-        # calculate win for every week
-        win_matrix = []
-        teams_sorted = sorted(self.teams, key=lambda x: x.team_id,
-                              reverse=False)
-
-        for team in teams_sorted:
-            wins = [0]*32
-            for mov, opponent in zip(team.mov[:week], team.schedule[:week]):
-                opp = int(opponent.team_id)-1
-                if mov > 0:
-                    wins[opp] += 1
-            win_matrix.append(wins)
-        dominance_matrix = two_step_dominance(win_matrix)
-        power_rank = power_points(dominance_matrix, teams_sorted, week)
-        return power_rank
-
     def boxscore(self,week,team):
         params = {
+            'view':'mBoxscore',
             'leagueId': self.league_id,
             'seasonId': self.year,
             'scoringPeriodId': week,
-            'teamId' : team
+            'matchupPeriodId': week,
+            'forTeamId' : team
         }
-        r = requests.get('%sboxscore' % (self.ENDPOINT, ), params=params)
+        r = requests.get(self.ENDPOINT % (self.year, self.league_id), cookies=self.cookies, params = params)
         data = r.json()
         if self.status == 401:
             raise PrivateLeagueException(data['error'][0]['message'])
@@ -123,80 +104,75 @@ class League(object):
 
         elif self.status != 200:
             raise UnknownLeagueException('Unknown %s Error' % self.status)
+
+        boxscoreData = data['schedule']
+        def checkAwayKey(obj):
+            if 'away' in list(obj.keys()):
+                return obj['away']['teamId']
+            else:
+                return 99
         
-        boxscoreData = data['boxscore']
-        if boxscoreData['teams'][0]['teamId'] == team:
-            d = 0
+        
+        boxscoreData = list(filter(lambda d: (d['matchupPeriodId'] == week and
+                                     (d['home']['teamId'] == team or
+                                      checkAwayKey(d) == team
+                                      )), boxscoreData))
+        
+        if boxscoreData[0]['home']['teamId'] == team:
+            d = 'home'
         else:
-            d = 1
-        teamData = boxscoreData['teams'][d]
-        
-        players = teamData['slots']
+            d = 'away'
+        teamData = boxscoreData[0][d]
+        print(teamData)
+        players = teamData['rosterForCurrentScoringPeriod']['entries']
         playerList = []
         for player in players:
-            if 'player' in player:
-                playerInfo = player['player']
-                if len(player['currentPeriodRealStats']) == 0:
+            if 'player' in player['playerPoolEntry']:
+                playerInfo = player['playerPoolEntry']['player']
+                if 'appliedStatTotal' not in player['playerPoolEntry']:
                     playerPoints = 0
                 else:
-                    playerPoints = player['currentPeriodRealStats']['appliedStatTotal']
-                playerData = {'playerName' : playerInfo['firstName'] + ' ' + playerInfo['lastName'],
+                    playerPoints = player['playerPoolEntry']['appliedStatTotal']
+                playerData = {'playerName' : playerInfo['fullName'],
+                              'playerId' : playerInfo['id'],
                               'playerTeam' : nflTeams[playerInfo['proTeamId']],
-                              'slot' : lineupSlots[player['slotCategoryId']],
-                              'healthStatus' : healthStatus[playerInfo['healthStatus']],
-                              'playerPos' : playerPos[playerInfo['defaultPositionId']],
+                              'slot' : lineupSlots[player['lineupSlotId']],
+                              'healthStatus' : 'empty',
+                              'stats' : playerInfo['stats'],
+                              'playerPos' : playerInfo['eligibleSlots'],
                               'Points' : playerPoints
                               }
             else:
                 playerData = {'playerName' : 'empty',
+                              'playerId' : 'empty',
                               'playerTeam' : 'empty',
-                              'slot' : lineupSlots[player['slotCategoryId']],
+                              'slot' : lineupSlots[player['lineupSlotId']],
                               'healthStatus' : 'empty',
+                              'stats': 'empty',
                               'playerPos' : 'empty',
                               'Points' : 0}
             playerList.append(playerData)
-            
         result = {'teamId' : teamData['teamId'],
-                  'season' : data['metadata']['seasonId'],
-                  'week' : boxscoreData['scheduleItems'][0]['matchupPeriodId'],
-                  'teamName' : teamData['team']['teamAbbrev'],
-                  'teamPoints' : teamData['appliedActiveRealTotal'],
-                  'opponentId' : boxscoreData['teams'][1-d]['teamId'],
-                  'opponentName' : boxscoreData['teams'][1-d]['team']['teamAbbrev'],
-                  'opponentPoints' : boxscoreData['teams'][1-d]['appliedActiveRealTotal'],
+                  'season' : self.year,
+                  'week' : week,
+                  'teamName' : team,
+                  'teamPoints' : teamData['rosterForCurrentScoringPeriod']['appliedStatTotal'],
+                  'opponentId' : '',
+                  'opponentName' : '',
+                  'opponentPoints' : '',
                   'playerList' : playerList}
 
         return result
 
-    def scoreboard(self, week=None):
-        '''Returns list of matchups for a given week'''
+
+    def freeAgents(self, week=None):
+
         params = {
-            'leagueId': self.league_id,
-            'seasonId': self.year
+            'scoringPeriodId':week,
+            'view':'kona_player_info'
         }
-        if week is not None:
-            params['matchupPeriodId'] = week
 
-        r = requests.get('%sscoreboard' % (self.ENDPOINT, ), params=params)
-        self.status = r.status_code
-        data = r.json()
-        if self.status == 401:
-            raise PrivateLeagueException(data['error'][0]['message'])
-
-        elif self.status == 404:
-            raise InvalidLeagueException(data['error'][0]['message'])
-
-        elif self.status != 200:
-            raise UnknownLeagueException('Unknown %s Error' % self.status)
-
-        matchups = data['scoreboard']['matchups']
-        result = [Matchup(matchup) for matchup in matchups]
-
-        for team in self.teams:
-            for matchup in result:
-                if matchup.home_team == team.team_id:
-                    matchup.home_team = team
-                if matchup.away_team == team.team_id:
-                    matchup.away_team = team
-
-        return result
+    def draftData(self):
+        params = {
+            'view':'mDraftDetail'
+        }
