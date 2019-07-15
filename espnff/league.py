@@ -22,7 +22,7 @@ class League(object):
     def __init__(self, league_id, year, espn_s2=None, swid=None):
         self.league_id = league_id
         self.year = year
-        self.ENDPOINT = "http://games.espn.com/ffl/api/v2/"
+        self.ENDPOINT = "http://games.espn.com/ffl/api/v3/"
         self.teams = []
         self.espn_s2 = espn_s2
         self.swid = swid
@@ -45,7 +45,7 @@ class League(object):
             }
 
         r = requests.get('%sleagueSettings' % (self.ENDPOINT, ), params=params, cookies=cookies)
-        
+        print('%sleagueSettings' % (self.ENDPOINT, ), params=params, cookies=cookies)
         self.status = r.status_code
         data = r.json()
 
