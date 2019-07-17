@@ -28,6 +28,7 @@ class League(object):
         self.espn_s2 = espn_s2
         self.swid = swid
         self._fetch_league()
+        self._fetch_players()
 
     def __repr__(self):
         return 'League(%s, %s)' % (self.league_id, self.year, )
@@ -50,40 +51,46 @@ class League(object):
         
         data = r.json()
 
+        self.teams = []
+        memberData = data['members']
 
-        self.teams = data['teams']
+        for team in data['members']:
+            
+            teamData = list(filter(lambda d: d['owners'][0] == team['id'],
+                                   data['teams']))
+            self.teams.append({
+                    'teamName' : team['firstName'] + ' ' + team['lastName'],
+                    'teamKey' : team['id'],
+                    'teamId' : teamData[0]['id'],
+                    'nickName' : teamData[0]['location'] + ' ' + teamData[0]['nickname'],
+                    'waiverRank' : teamData[0]['waiverRank'],
+                    'budgetSpent' : teamData[0]['transactionCounter']['acquisitionBudgetSpent'],
+                    'trades' : teamData[0]['transactionCounter']['trades'],
+                    'acquisitions' : teamData[0]['transactionCounter']['matchupAcquisitionTotals']
+                })
 
 
-    def _fetch_draft_data(self, data):
-        teams = data['teams']
+
+    def _fetch_players(self):
+        params = {
+            'scoringPeriodId':0,
+            'view':'players_wl'
+            }
+        playerEndpoint = 'http://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/players'
+
+        cookies = None
+        if self.espn_s2 and self.swid:
+            self.cookies = {
+                'espn_s2': self.espn_s2,
+                'SWID': self.swid
+            }
+        r = requests.get(self.ENDPOINT % (self.year, self.league_id), cookies=self.cookies, params = params)
+
+        self.players = r.json()['players']
+
+
         
-    
 
-    def _fetch_teams(self, data):
-        '''Fetch teams in league'''
-        teams = data['teams']
-
-        for team in teams:
-            self.teams.append(Team(teams[team]))
-
-        # replace opponentIds in schedule with team instances
-        for team in self.teams:
-            for week, matchup in enumerate(team.schedule):
-                for opponent in self.teams:
-                    if matchup == opponent.team_id:
-                        team.schedule[week] = opponent
-
-        # calculate margin of victory
-        for team in self.teams:
-            for week, opponent in enumerate(team.schedule):
-                mov = team.scores[week] - opponent.scores[week]
-                team.mov.append(mov)
-
-        # sort by team ID
-        self.teams = sorted(self.teams, key=lambda x: x.team_id, reverse=False)
-
-    def _fetch_settings(self, data):
-        self.settings = Settings(data)
 
     def boxscore(self,week,team):
         params = {
@@ -123,7 +130,6 @@ class League(object):
         else:
             d = 'away'
         teamData = boxscoreData[0][d]
-        print(teamData)
         players = teamData['rosterForCurrentScoringPeriod']['entries']
         playerList = []
         for player in players:
@@ -176,3 +182,30 @@ class League(object):
         params = {
             'view':'mDraftDetail'
         }
+
+        r = requests.get(self.ENDPOINT % (self.year, self.league_id), cookies=self.cookies, params = params)
+        
+        data = r.json()
+
+        draftData = data['draftDetail']['picks']
+
+
+
+        draftPicks = []
+        for pick in draftData:
+            playerData = list(filter(lambda d: 'player' in d
+                                     and d['player']['id'] == pick['playerId'],
+                                     self.players))[0]['player']
+
+            
+            pickData = {
+                'round' : pick['roundId'],
+                'pick' : pick['overallPickNumber'],
+                'teamId' : '',
+                'playerId' : playerData['fullName']
+
+                }
+
+            draftPicks.append(pickData)
+
+        return draftPicks
