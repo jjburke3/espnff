@@ -29,6 +29,7 @@ class League(object):
         self.swid = swid
         self._fetch_league()
         self._fetch_players()
+        self._fetch_teams()
 
     def __repr__(self):
         return 'League(%s, %s)' % (self.league_id, self.year, )
@@ -51,14 +52,14 @@ class League(object):
         
         data = r.json()
 
-        self.teams = []
+        self.teams = {}
         memberData = data['members']
 
         for team in data['members']:
             
             teamData = list(filter(lambda d: d['owners'][0] == team['id'],
                                    data['teams']))
-            self.teams.append({
+            self.teams[team['id']] = {
                     'teamName' : team['firstName'] + ' ' + team['lastName'],
                     'teamKey' : team['id'],
                     'teamId' : teamData[0]['id'],
@@ -67,27 +68,99 @@ class League(object):
                     'budgetSpent' : teamData[0]['transactionCounter']['acquisitionBudgetSpent'],
                     'trades' : teamData[0]['transactionCounter']['trades'],
                     'acquisitions' : teamData[0]['transactionCounter']['matchupAcquisitionTotals']
-                })
+                }
+
+            self.teams[teamData[0]['id']] = {
+                    'teamName' : team['firstName'] + ' ' + team['lastName'],
+                    'teamKey' : team['id'],
+                    'teamId' : teamData[0]['id'],
+                    'nickName' : teamData[0]['location'] + ' ' + teamData[0]['nickname'],
+                    'waiverRank' : teamData[0]['waiverRank'],
+                    'budgetSpent' : teamData[0]['transactionCounter']['acquisitionBudgetSpent'],
+                    'trades' : teamData[0]['transactionCounter']['trades'],
+                    'acquisitions' : teamData[0]['transactionCounter']['matchupAcquisitionTotals']
+                }
 
 
 
     def _fetch_players(self):
         params = {
-            'scoringPeriodId':0,
             'view':'players_wl'
             }
-        playerEndpoint = 'http://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/players'
+        playerEndpoint = 'https://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/players'
 
-        cookies = None
-        if self.espn_s2 and self.swid:
-            self.cookies = {
-                'espn_s2': self.espn_s2,
-                'SWID': self.swid
+        r = requests.get(playerEndpoint % (self.year), params = params)
+
+        self.players = {}
+
+        for player in r.json():
+            self.players[player['id']] = {
+                'playerId' : player['id'],
+                'player' : player['fullName'],
+                'position' : player['defaultPositionId'],
+                'team' : player['proTeamId'],
+                'slots' : player['eligibleSlots']
+                }
+
+    def _fetch_teams(self):
+        params = {
+            'view':'proTeamSchedules'
             }
+
+        teamEndpoint = 'https://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/'
+
+
+        r = requests.get(teamEndpoint % (self.year), params = params)
+        teamData = r.json()['settings']['proTeams']
+        self.nflTeams = {}
+        for team in teamData:
+            if 'proGamesByScoringPeriod' in team:
+                sched = team['proGamesByScoringPeriod']
+            else:
+                sched = []
+            self.nflTeams[team['id']] = {
+                    'id' : team['id'],
+                    'abbrev' : team['abbrev'],
+                    'games' : sched,
+                    'byeWeek' : team['byeWeek']
+                }
+            self.nflTeams[team['abbrev']] = {
+                    'id' : team['id'],
+                    'abbrev' : team['abbrev'],
+                    'games' : sched,
+                    'byeWeek' : team['byeWeek']
+                }
+        
+
+        
+
+
+    def transactions(self):
+        params = {
+            'view' : 'kona_playercard'
+            }
+
+
         r = requests.get(self.ENDPOINT % (self.year, self.league_id), cookies=self.cookies, params = params)
+        
+        trans = r.json()['players']
 
-        self.players = r.json()['players']
-
+        transList = []
+        print(self.teams)
+        print(self.nflTeams)
+        for player in trans[:15]:
+            playerInfo = player['player']
+            playerName = playerInfo['fullName']
+            playerTeam = playerInfo['proTeamId']
+            playerId = playerInfo['id']
+            for tran in player['transactions']:
+                transList.append({
+                        'player' : playerName,
+                        'playerId' : playerId,
+                        'playerTeam' : playerTeam,
+                        'tranPeriod' : tran['scoringPeriodId'],
+                        'tranType' : tran['type']
+                    })
 
         
 
