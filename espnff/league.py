@@ -146,21 +146,36 @@ class League(object):
         trans = r.json()['players']
 
         transList = []
-        print(self.teams)
-        print(self.nflTeams)
-        for player in trans[:15]:
+        for player in trans[:50]:
             playerInfo = player['player']
             playerName = playerInfo['fullName']
             playerTeam = playerInfo['proTeamId']
             playerId = playerInfo['id']
             for tran in player['transactions']:
-                transList.append({
+                tranData = {
                         'player' : playerName,
                         'playerId' : playerId,
                         'playerTeam' : playerTeam,
+                        'bidAmount' : tran['bidAmount'],
                         'tranPeriod' : tran['scoringPeriodId'],
-                        'tranType' : tran['type']
-                    })
+                        'tranStatus' : tran['status'],
+                        'transubOrder' : tran['subOrder'],
+                        'tranType' : tran['type'],
+                        'leageTeam' : self.teams[tran['teamId']]['teamName'],
+                        'tranParts' : []
+                    }
+                for item in tran['items']:
+                    tranData['tranParts'].append({
+                        'fromTeam' : 'None' if item['fromTeamId']==0 else self.teams[item['fromTeamId']]['teamName'],
+                        'toTeam' : 'None' if item['toTeamId']==0 else self.teams[item['toTeamId']]['teamName'],
+                        'pickNumber' : item['overallPickNumber'],
+                        'playerId' : item['playerId'],
+                        'player' : self.players[item['playerId']]['player'],
+                        'position' : self.players[item['playerId']]['position'],
+                        'team' : self.players[item['playerId']]['team'],
+                        'type' : item['type']
+                        })
+                transList.append(tranData)
 
         
 
