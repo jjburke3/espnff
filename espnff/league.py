@@ -80,6 +80,10 @@ class League(object):
                     'trades' : teamData[0]['transactionCounter']['trades'],
                     'acquisitions' : teamData[0]['transactionCounter']['matchupAcquisitionTotals']
                 }
+            self.teams[99] = {
+                'teamId' : 99,
+                'teamName' : 'Bye'
+                }
 
 
 
@@ -96,7 +100,7 @@ class League(object):
         for player in r.json():
             self.players[player['id']] = {
                 'playerId' : player['id'],
-                'player' : player['fullName'],
+                'player' : player['fullName'].replace("'","_"),
                 'position' : player['defaultPositionId'],
                 'team' : player['proTeamId'],
                 'slots' : player['eligibleSlots']
@@ -206,23 +210,28 @@ class League(object):
                 return obj['away']['teamId']
             else:
                 return 99
-        
-        
         boxscoreData = list(filter(lambda d: (d['matchupPeriodId'] == week and
                                      (d['home']['teamId'] == team or
                                       checkAwayKey(d) == team
                                       )), boxscoreData))
-        
+
         if boxscoreData[0]['home']['teamId'] == team:
             d = 'home'
+            e = 'away'
         else:
             d = 'away'
+            e = 'home'
         teamData = boxscoreData[0][d]
+        if checkAwayKey(boxscoreData[0]) == 99:
+            oppTeam = {'teamId' : 99, 'totalPoints' : 0}
+        else:
+            oppTeam = boxscoreData[0][e]
         players = teamData['rosterForCurrentScoringPeriod']['entries']
         playerList = []
         for player in players:
             if 'player' in player['playerPoolEntry']:
                 playerInfo = player['playerPoolEntry']['player']
+                
                 if 'appliedStatTotal' not in player['playerPoolEntry']:
                     playerPoints = 0
                 else:
@@ -233,7 +242,7 @@ class League(object):
                               'slot' : lineupSlots[player['lineupSlotId']],
                               'healthStatus' : 'empty',
                               'stats' : playerInfo['stats'],
-                              'playerPos' : playerInfo['eligibleSlots'],
+                              'playerPos' : playerPos[playerInfo['defaultPositionId']],
                               'Points' : playerPoints
                               }
             else:
@@ -249,11 +258,11 @@ class League(object):
         result = {'teamId' : teamData['teamId'],
                   'season' : self.year,
                   'week' : week,
-                  'teamName' : team,
+                  'teamName' : self.teams[team]['teamName'],
                   'teamPoints' : teamData['rosterForCurrentScoringPeriod']['appliedStatTotal'],
-                  'opponentId' : '',
-                  'opponentName' : '',
-                  'opponentPoints' : '',
+                  'opponentId' : oppTeam['teamId'],
+                  'opponentName' : self.teams[oppTeam['teamId']]['teamName'],
+                  'opponentPoints' : 0,
                   'playerList' : playerList}
 
         return result
@@ -281,16 +290,17 @@ class League(object):
 
         draftPicks = []
         for pick in draftData:
-            playerData = list(filter(lambda d: 'player' in d
-                                     and d['player']['id'] == pick['playerId'],
-                                     self.players))[0]['player']
+            playerData = self.players[pick['playerId']]
 
             
             pickData = {
                 'round' : pick['roundId'],
                 'pick' : pick['overallPickNumber'],
-                'teamId' : '',
-                'playerId' : playerData['fullName']
+                'teamId' : self.teams[pick['teamId']]['teamName'],
+                'playerId' : pick['playerId'],
+                'playerName' : playerData['player'],
+                'nflTeam' : self.nflTeams[playerData['team']]['abbrev'],
+                'playerPosition' : playerPos[playerData['position']]
 
                 }
 
