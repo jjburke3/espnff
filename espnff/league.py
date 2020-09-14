@@ -1,4 +1,5 @@
 import requests
+import json
 
 from .utils import (two_step_dominance,
                     power_points, )
@@ -21,6 +22,7 @@ from .boxCodes import (lineupSlots,
 class League(object):
     '''Creates a League instance for Public ESPN league'''
     def __init__(self, league_id, year, espn_s2=None, swid=None):
+
         self.league_id = league_id
         self.year = year
         self.ENDPOINT = "http://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/segments/0/leagues/%d"
@@ -35,6 +37,7 @@ class League(object):
         return 'League(%s, %s)' % (self.league_id, self.year, )
 
     def _fetch_league(self):
+        
         params = {
            'view':'mTeam'
         }
@@ -51,16 +54,13 @@ class League(object):
         self.status = r.status_code
         
         data = r.json()
-
         self.teams = {}
         memberData = data['members']
-
         for team in data['members']:
-            
-            teamData = list(filter(lambda d: d['owners'][0] == team['id'],
+            teamData = list(filter(lambda d: team['id'] in d['owners'] ,
                                    data['teams']))
             self.teams[team['id']] = {
-                    'teamName' : team['firstName'] + ' ' + team['lastName'],
+                    'teamName' : ('Billy' if team['firstName'] == 'Bill' else team['firstName']) + ' ' + team['lastName'],
                     'teamKey' : team['id'],
                     'teamId' : teamData[0]['id'],
                     'nickName' : teamData[0]['location'] + ' ' + teamData[0]['nickname'],
@@ -71,7 +71,7 @@ class League(object):
                 }
 
             self.teams[teamData[0]['id']] = {
-                    'teamName' : team['firstName'] + ' ' + team['lastName'],
+                    'teamName' : ('Billy' if team['firstName'] == 'Bill' else team['firstName']) + ' ' + team['lastName'],
                     'teamKey' : team['id'],
                     'teamId' : teamData[0]['id'],
                     'nickName' : teamData[0]['location'] + ' ' + teamData[0]['nickname'],
@@ -92,8 +92,9 @@ class League(object):
             'view':'players_wl'
             }
         playerEndpoint = 'https://fantasy.espn.com/apis/v3/games/ffl/seasons/%d/players'
-
-        r = requests.get(playerEndpoint % (self.year), params = params)
+        filters = {"filterActive":{"value":True}}
+        headers = {'x-fantasy-filter': json.dumps(filters)}
+        r = requests.get(playerEndpoint % (self.year), params = params, headers=headers)
 
         self.players = {}
 
@@ -283,9 +284,7 @@ class League(object):
         r = requests.get(self.ENDPOINT % (self.year, self.league_id), cookies=self.cookies, params = params)
         
         data = r.json()
-
         draftData = data['draftDetail']['picks']
-
 
 
         draftPicks = []
@@ -305,5 +304,4 @@ class League(object):
                 }
 
             draftPicks.append(pickData)
-
         return draftPicks
